@@ -1,0 +1,15 @@
+{
+  "name": "aram-overlay",
+  "productName": "ARAM Mayhem Overlay",
+  "version": "4.1.0",
+  "description": "Native always-on-top ARAM Mayhem overlay: per-champion augment rankings and item builds from JSON data feeds, auto-detects your champion.",
+  "main": "bootstrap.js",
+  "scripts": {
+    "start": "electron .",
+    "pack-win": "electron-packager . \"ARAM Overlay\" --platform=win32 --arch=x64 --out=dist --overwrite --prune=true"
+  },
+  "devDependencies": {
+    "electron": "45.3.3",
+    "@electron/packager": "20.3.0"
+  }
+}

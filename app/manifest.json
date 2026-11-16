@@ -1,0 +1,13 @@
+{
+  "version": "4.1.0",
+  "files": {
+    "badges.html": "7f46aa2379e7627942d910898f4b4723d1fa3226751134fb741c894306c828cf",
+    "data.js": "ef5a6230075a3923ae3baa83343b9247dddf784b9b13d7056e182f03e9447b03",
+    "main.js": "9bb88187cd8ff62ca64ad55b6431892468397e545f3d2c35f37a67ec8406ccab",
+    "match.js": "f954f7b550bc7e755f825743be597a67618598b234ec947de0fe89ff637dbd69",
+    "ocr.js": "f00b0bddb7fb248ade0d9741da6c8baf58668668dbf74070c0fee2ca8a6db839",
+    "ocr.ps1": "db88420116ed0d4daafec2eb42dc1ab41b18f80026de2ac4426bc47f64fa43e2",
+    "overlay.html": "1b4a2d7f7e822dbde703f5253601aa6b13be0f88253d9f59652ab66cae525975",
+    "preload.js": "f9e84cfb2dca42d16e59df9c288e9160a398fc309af9ce7183e51dbdffbb19a1"
+  }
+}
