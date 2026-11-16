@@ -1,7 +1,7 @@
 {
   "name": "aram-overlay",
   "productName": "ARAM Mayhem Overlay",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Native always-on-top ARAM Mayhem overlay: per-champion augment rankings and item builds from JSON data feeds, auto-detects your champion.",
   "main": "bootstrap.js",
   "scripts": {

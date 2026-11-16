@@ -67,10 +67,11 @@ async function loadGlobal() {
       safe(getJson(`${DD}/cdn/${g.dd}/data/en_US/item.json`, 24), { data: {} }),
       safe(getJson(`${DD}/cdn/${g.dd}/data/en_US/summoner.json`, 24), { data: {} })
     ]);
-    g.champs = Object.values(c.data).map(x => ({ id: x.id, key: x.key, name: x.name }))
+    g.champs = Object.values(c.data).map(x => ({ id: x.id, key: x.key, name: x.name, tags: x.tags || [], info: x.info || {} }))
       .sort((a, b) => a.name.localeCompare(b.name));
     g.items = i.data;
     g.spells = {};
+    g.spellNames = new Set(Object.values(s.data).map(sp => norm(sp.name)));
     for (const sp of Object.values(s.data)) g.spells[sp.key] = { name: sp.name, img: `${DD}/cdn/${g.dd}/img/spell/${sp.image.full}` };
   } catch (e) { g.errors.push('Riot Data Dragon: ' + e.message); }
 
@@ -83,6 +84,8 @@ async function loadGlobal() {
     }
     if (!g.patch) throw new Error('no Mayhem data for recent patches');
     g.tips = await safe(getJson(`${BB}/custom-aram-mayhem/${g.patch}/augment-tooltips-${g.patch}.json`, 24), {});
+    g.augNames = new Map(); // normalised Mayhem augment name -> display name
+    for (const id of Object.keys(g.tips)) if (g.manifest[id]) g.augNames.set(norm(g.manifest[id]), g.manifest[id]);
     const tiers = await safe(getJson(`${BB}/custom-aram-mayhem/${g.patch}/tierlist-champions-${g.patch}.json`, 12), null);
     g.champTier = {};
     if (tiers && tiers.tiers) for (const [t, ids] of Object.entries(tiers.tiers)) ids.forEach(id => (g.champTier[id] = t));
@@ -212,4 +215,4 @@ async function championData(champ) {
   return out;
 }
 
-module.exports = { loadGlobal, championData };
+module.exports = { loadGlobal, championData, itemInfo, norm, global: () => G };

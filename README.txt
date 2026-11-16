@@ -27,6 +27,18 @@ gets a label on top:
   "Build X"                  The item this augment needs
 The Augments tab lists every combo for your champion.
 
+YOUR AUGMENTS
+When the cards close, the app notes the card your mouse was on
+as the one you took. See them in the panel under "Your augments
+this game". Wrong one? Click the X, or open the right augment
+and click "I took this".
+Labels then get specific: "Completes God combo: you have X".
+
+BUILD FOR THIS GAME (Items tab, in game)
+Reads both teams and their items from League. Suggests items
+against their healing, damage type, tanks and shields, plus the
+items your own augments need. Updates by itself.
+
 WHAT THE GRADE MEANS
 Letter       How high U.GG ranks that augment for YOUR champion.
 "% pick it"  How often players pick it overall (arammayhem.com).

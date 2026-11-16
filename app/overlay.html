@@ -46,6 +46,12 @@
   .row .side { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .desc { grid-column: 3 / 5; color: var(--dim); font-size: 12px; white-space: pre-line; padding-top: 3px; display: none; user-select: text; }
   .row.open .desc { display: block; } .row.open .name { white-space: normal; }
+  .row.took .name { color: var(--good); } .desc.acts { padding-top: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; } .tchip { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 12px; }
+  .tchip button { color: var(--dim); width: 18px; height: 18px; border-radius: 50%; } .tchip button:hover { background: var(--line); color: var(--text); }
+  .sug { display: grid; grid-template-columns: 30px 1fr; column-gap: 9px; align-items: center; padding: 4px 0; } .sug img { width: 30px; height: 30px; border-radius: 7px; background: var(--bg); }
+  .sug .why { color: var(--dim); font-size: 12px; } .sug b { font-weight: 600; } .sug i { color: var(--gold); font-style: normal; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .seen { color: var(--dim); font-size: 12px; padding: 2px 0 4px; }
   .more { display: block; width: 100%; text-align: left; color: var(--dim); padding: 6px 6px 6px 37px; border-radius: 8px; }
   .more:hover { color: var(--text); background: var(--card); }
 
@@ -111,6 +117,7 @@
   const SHOWN = 6, TOP = 3;
   const LABEL = { prismatic: 'Prismatic', gold: 'Gold', silver: 'Silver' };
   const keyName = k => (k || '').replace('Control', 'Ctrl').replace(/\+/g, ' + ');
+  let TAKEN = [], SITU = null;
   let S = { phase: 'idle', key: 'F9', tab: 'augments', readCards: true }, D = null, OFFER = { status: 'idle', list: [] }, expanded = new Set(), loading = null;
 
   function fillChamps() { o.champions().then(l => { if (l.length) $('champs').innerHTML = l.map(c => `<option value="${c.name.replace(/"/g, '&quot;')}">`).join(''); }); }
@@ -126,8 +133,13 @@
     if (opts.best) row.append(el('span', 'pill', 'PICK'));
     else row.append(el('span', 'side', opts.side || (a.pickRate != null ? a.pickRate.toFixed(0) + '%' : '')));
     if (a.combo) { const nm = row.querySelector('.name'); nm.append(tag(a.combo.type)); }
-    if (a.combo && a.combo.with && a.combo.with.length) row.append(el('div', 'extra', 'Combo with ' + a.combo.with.join(' + ')));
-    if (a.items && a.items.length) row.append(el('div', 'extra item', 'Build ' + a.items.map(i => i.name).join(' or ')));
+    if (a.label) row.append(el('div', 'extra' + (a.combo ? '' : ' item'), a.label));
+    else {
+      if (a.combo && a.combo.with && a.combo.with.length) row.append(el('div', 'extra', 'Combo with ' + a.combo.with.join(' + ')));
+      if (a.items && a.items.length) row.append(el('div', 'extra item', 'Needs ' + a.items.map(i => i.name).join(' or ')));
+    }
+    if (TAKEN.some(t => t.id === a.id)) row.classList.add('took');
+    if (!opts.fixed) { const d = el('div', 'desc acts'); const b = el('button', 'link', TAKEN.some(t => t.id === a.id) ? 'Remove from my augments' : 'I took this'); b.onclick = e => { e.stopPropagation(); o.toggleTaken(a.id); }; d.append(b); row.append(d); }
     row.append(el('div', 'desc', a.desc || 'No description yet.'));
     if (!opts.fixed) row.onclick = () => row.classList.toggle('open');
     return row;
@@ -150,6 +162,24 @@
   }
   function findName(n) { const k = n.toLowerCase(); for (const l of Object.values(D.rarities || {})) { const a = l.find(x => x.name.toLowerCase() === k); if (a) return a; } return null; }
 
+  function takenBox() {
+    const box = el('div', 'box'); const h = el('h3'); h.append(el('span', null, 'Your augments this game'), el('span', null, TAKEN.length || '')); box.append(h);
+    if (!TAKEN.length) { box.append(el('div', 'seen', 'None tracked yet. Picks are added when the cards close. Wrong one? Open an augment below and click "I took this".')); return box; }
+    const c = el('div', 'chips');
+    TAKEN.forEach(t => { const chip = el('div', 'tchip'); chip.append(el('span', null, t.name)); const x = el('button', null, '✕'); x.title = 'Remove'; x.onclick = () => o.toggleTaken(t.id); chip.append(x); c.append(chip); });
+    box.append(c); return box;
+  }
+  function situationBox() {
+    if (S.phase !== 'game' || !SITU) return null;
+    const box = el('div', 'box'); const h = el('h3');
+    const e = SITU.enemy; h.append(el('span', null, 'For this game')); box.append(h);
+    if (e) box.append(el('div', 'seen', `Enemy team: ${e.ad} physical · ${e.ap} magic · ${e.tanks} tank · ${e.healers} healer`));
+    if (!SITU.suggestions.length) box.append(el('div', 'seen', 'Nothing special needed. Follow the usual build below.'));
+    SITU.suggestions.forEach(s => { const r = el('div', 'sug'); const t = el('div'); const top = el('div'); top.append(el('i', null, s.title + '  '), el('b', null, s.name)); t.append(top, el('div', 'why', s.why)); r.append(img(s.img), t); box.append(r); });
+    (SITU.seen || []).forEach(p => box.append(el('div', 'seen', `${p.enemy ? 'Enemy' : 'Ally'} ${p.name} has ${p.augments.join(', ')}`)));
+    return box;
+  }
+
   function offerBlock() {
     const box = el('section'); box.id = 'offer';
     if (S.phase !== 'game' || OFFER.status === 'idle' || OFFER.status === 'off') { if (S.phase === 'game' && S.readCards) { const b = el('button', 'link', 'Read cards now'); b.onclick = o.readCards; const w = el('div', 'hint'); w.append(b); box.append(w); box.classList.add('show'); } return box; }
@@ -159,7 +189,7 @@
     if (OFFER.status === 'found') {
       [...OFFER.list].sort((a, b) => a.rank / a.total - b.rank / b.total).forEach(x => {
         const a = find(x.id) || x;
-        box.append(augRow({ ...a, rank: x.rank, grade: x.grade, combo: x.combo || a.combo }, { best: x.best, fixed: true }));
+        box.append(augRow({ ...a, rank: x.rank, grade: x.grade, combo: x.combo || a.combo, label: x.label }, { best: x.best, fixed: true }));
       });
     } else {
       const hint = el('div', 'hint', OFFER.status === 'error' ? 'Could not read the screen on this PC.' : 'No augment cards found on screen.');
@@ -173,6 +203,7 @@
   function renderAugments(m) {
     if (!D.rarities) { m.append(el('div', 'msg', (D.errors || []).join('\n') || 'No augment data for this champion yet.')); return; }
     m.append(offerBlock());
+    if (S.phase === 'game') m.append(takenBox());
     const cb = combosBox(); if (cb) m.append(cb);
     for (const key of ['prismatic', 'gold', 'silver']) {
       const all = D.rarities[key] || []; if (!all.length) continue;
@@ -196,6 +227,7 @@
   function renderItems(m) {
     const b = D.build;
     if (!b) { m.append(el('div', 'msg', 'No item data for this champion yet.')); return; }
+    const sb = situationBox(); if (sb) m.append(sb);
     if (b.start) m.append(itemBox('Start with', '', dedupe(b.start.items)));
     if (b.core) m.append(itemBox('Build first', b.core.wr != null ? b.core.wr.toFixed(1) + '% win' : '', b.core.items));
     ['4th item', '5th item', '6th item'].forEach((t, i) => {
@@ -207,7 +239,7 @@
       const f = el('div', 'flow'); b.skillPriority.split('').forEach((k, i) => { if (i) f.append(el('i', null, '›')); f.append(el('b', null, k)); }); box.append(f); m.append(box);
     }
     if (b.spells && b.spells.length) m.append(itemBox('Summoner spells', '', b.spells));
-    m.append(el('div', 'note', 'Item stats come from regular ARAM games. Riot does not publish ARAM Mayhem match data.'));
+    m.append(el('div', 'note', '"For this game" reads both teams and their items from League, and your augments. It updates by itself. Item stats below come from regular ARAM games.'));
   }
   function dedupe(items) { const m = new Map(); items.forEach(i => { const e = m.get(i.id); if (e) e.count++; else m.set(i.id, { ...i, count: 1 }); }); return [...m.values()].map(i => ({ ...i, name: i.count > 1 ? `${i.name} ×${i.count}` : i.name })); }
 
@@ -247,6 +279,8 @@
     $('patch').textContent = d.patch ? '· patch ' + d.patch.replace('_', '.') : '';
     $('main').scrollTop = 0; render();
   });
+  o.onTaken(l => { TAKEN = l || []; if (D) render(); });
+  o.onSituation(x => { SITU = x; if (D && S.tab === 'items') render(); });
   o.onOffer(x => { OFFER = x; if (D && S.tab === 'augments') { render(); if (x.status !== 'idle') $('main').scrollTop = 0; } });
 
   $('search').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { o.pick(e.target.value); e.target.value = ''; e.target.blur(); } });

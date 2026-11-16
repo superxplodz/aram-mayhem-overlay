@@ -15,7 +15,7 @@
   .t { display: flex; flex-direction: column; line-height: 1.15; }
   .t b { font-size: 15px; } .t span { font-size: 11px; color: #9aa4b5; }
   .best .t span { color: #b9f3d3; }
-  .x { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #c895ff; color: #1a0b2a; }
+  .x { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #c895ff; color: #1a0b2a; }
   .x.god { background: #ffb347; color: #0b0f14; } .x.strong { background: #42d98a; color: #062014; } .x.trap, .x.bug { background: #ff7070; color: #2a0808; } .x.item { background: #f0c050; color: #241a02; }
 </style>
 </head>
@@ -27,14 +27,13 @@
   window.overlay.onBadges(list => {
     document.body.textContent = '';
     for (const a of list) {
-      const trap = a.combo && (a.combo.type === 'trap' || a.combo.type === 'bug');
+      const trap = a.kind === 'trap' || a.kind === 'bug';
       const e = el('b' + (a.best ? ' best' : '') + (trap ? ' trap' : '')); e.style.left = a.x + 'px';
       // extra line on top: combo for this champion, or the item this augment needs
-      if (a.combo) e.append(el('x ' + a.combo.type, (COMBO[a.combo.type] || 'Combo') + (a.combo.with && a.combo.with.length ? ' with ' + a.combo.with.join(' + ') : '')));
-      else if (a.item) e.append(el('x item', 'Build ' + a.item));
+      if (a.label) e.append(el('x ' + (a.kind || ''), a.label));
       const m = el('main'); const t = el('t');
       const b = document.createElement('b'); b.textContent = a.best ? 'Best pick' : WORD[a.grade] || '';
-      const s = document.createElement('span'); s.textContent = a.pickRate != null ? Math.round(a.pickRate) + '% pick it' : '';
+      const s = document.createElement('span'); s.textContent = '#' + a.rank + ' of ' + a.total + (a.pickRate != null ? ' · ' + Math.round(a.pickRate) + '% pick it' : '');
       t.append(b, s); m.append(el('g g' + a.grade, a.grade), t); e.append(m); document.body.append(e);
     }
   });

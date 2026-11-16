@@ -12,6 +12,7 @@ const { execFile } = require('child_process');
 const data = require('./data');
 const ocr = require('./ocr');
 const { matchOffer } = require('./match');
+const situation = require('./situation');
 
 // (hardware acceleration is switched off in bootstrap.js, before the app is ready)
 
@@ -59,14 +60,27 @@ function getLocal(url, headers = {}) {
 const LIVE = 'https://127.0.0.1:2999/liveclientdata';
 let myName = null;
 // One small local request: my champion, level and whether I am dead.
+const champOf = p => byId.get((p.rawChampionName || '').replace('game_character_displayname_', '').toLowerCase()) || champs.find(c => c.name === p.championName) || null;
+// League only reveals an augment when it replaces a summoner spell: spot those by name.
+function spellAugments(p) {
+  const g = data.global(); if (!g || !g.augNames) return [];
+  const out = [];
+  for (const s of Object.values(p.summonerSpells || {})) {
+    const n = data.norm(s && s.displayName);
+    if (n && g.augNames.has(n) && !(g.spellNames && g.spellNames.has(n))) out.push(g.augNames.get(n));
+  }
+  return out;
+}
 async function liveMe() {
+  if (process.env.ARAM_FAKE_LIVE) { const f = JSON.parse(fs.readFileSync(process.env.ARAM_FAKE_LIVE, 'utf8')); f.players.forEach(p => { p.champ = byId.get(p.id.toLowerCase()) || { id: p.id, name: p.id, tags: [], info: {} }; p.spellAugments = p.spellAugments || []; p.items = p.items || []; }); const me = f.players.find(p => p.me); return { champ: me.champ, level: f.level, dead: f.dead, team: me.team, items: me.items, players: f.players }; } // test hook
   if (!myName) myName = await getLocal(`${LIVE}/activeplayername`);
-  const players = await getLocal(`${LIVE}/playerlist`);
-  const p = players.find(x => x.riotId === myName || x.summonerName === myName);
+  const list = await getLocal(`${LIVE}/playerlist`);
+  const p = list.find(x => x.riotId === myName || x.summonerName === myName);
   if (!p) return null;
-  const raw = (p.rawChampionName || '').replace('game_character_displayname_', '');
-  const champ = byId.get(raw.toLowerCase()) || champs.find(c => c.name === p.championName) || null;
-  return champ ? { champ, level: p.level || 0, dead: !!p.isDead } : null;
+  const champ = champOf(p);
+  if (!champ) return null;
+  const players = list.map(x => ({ champ: champOf(x), championName: x.championName, team: x.team, items: x.items || [], spellAugments: spellAugments(x), me: x === p }));
+  return { champ, level: p.level || 0, dead: !!p.isDead, team: p.team, items: p.items || [], players };
 }
 
 let lcu = null, lcuLastLookup = 0;
@@ -103,6 +117,8 @@ let loadSeq = 0, scanning = false;
 const PICK_LEVELS = [3, 7, 11, 15];
 let level = 0, dead = false, gameStart = 0, resolved = 0, offerSig = '', offerMiss = 0, lastScan = 0;
 let userHid = false, lastHits = null, lastDisplay = null;   // badge key state
+let taken = [], hoverId = null, hoverAt = 0;                 // augments I took this game
+let live = null, situSig = '';                                // last live snapshot
 
 const send = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
 const state = () => ({ version: process.env.ARAM_VERSION || '', updated: process.env.ARAM_UPDATED || '', champion: current, phase, key: settings.key, badgeKey: settings.badgeKey, readCards: settings.readCards, tab: settings.tab, ocr: ocr.status() });
@@ -117,7 +133,7 @@ async function show(c) {
   send('loading', c);
   let d;
   try { d = await data.championData(c); } catch (e) { d = { champ: c, errors: [e.message] }; }
-  if (seq === loadSeq) { currentData = d; send('data', d); }
+  if (seq === loadSeq) { currentData = d; send('data', d); situSig = ''; if (taken.length) pushTaken(); }
 }
 
 function createWindow() {
@@ -165,14 +181,14 @@ function candidates() {
   const r = currentData && currentData.rarities;
   if (!r) return [];
   const out = [];
-  for (const [rarity, list] of Object.entries(r)) for (const a of list) out.push({ id: a.id, name: a.name, rarity, rank: a.rank, total: list.length, grade: a.grade, pickRate: a.pickRate, combo: a.combo, items: a.items });
+  for (const [rarity, list] of Object.entries(r)) for (const a of list) out.push({ id: a.id, name: a.name, rarity, rank: a.rank, total: list.length, grade: a.grade, pickRate: a.pickRate, combo: a.combo, items: a.items, desc: a.desc });
   return out;
 }
 
 function showBadges(hits, display) {
   lastHits = hits; lastDisplay = display;
   if (userHid) return;
-  const PAD = 130, H = 86;
+  const PAD = 190, H = 86;
   const minX = Math.min(...hits.map(h => h.screen.x)), maxX = Math.max(...hits.map(h => h.screen.x + h.screen.w));
   const top = Math.min(...hits.map(h => h.screen.y));
   const b = { x: Math.round(display.bounds.x + minX - PAD), y: Math.round(Math.max(display.bounds.y, display.bounds.y + top - H - 6)), width: Math.round(maxX - minX + PAD * 2), height: H };
@@ -184,12 +200,12 @@ function showBadges(hits, display) {
     badgeWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     badgeWin.loadFile(path.join(__dirname, 'badges.html'));
   } else badgeWin.setBounds(b);
-  const list = hits.map(h => ({ x: Math.round(h.screen.x + h.screen.w / 2 - (minX - PAD)), grade: h.grade, pickRate: h.pickRate, best: h.best, combo: h.combo || null, item: h.items && h.items[0] ? h.items[0].name : null }));
+  const list = hits.map(h => ({ x: Math.round(h.screen.x + h.screen.w / 2 - (minX - PAD)), grade: h.grade, pickRate: h.pickRate, best: h.best, rank: h.rank, total: h.total, label: h.label, kind: h.kind }));
   const go = () => { if (!badgeWin || badgeWin.isDestroyed()) return; badgeWin.webContents.send('badges', list); if (!badgeWin.isVisible()) badgeWin.showInactive(); };
   if (badgeWin.webContents.isLoading()) badgeWin.webContents.once('did-finish-load', go); else go();
 }
 function hideBadges() { if (badgeWin && !badgeWin.isDestroyed() && badgeWin.isVisible()) badgeWin.hide(); }
-function clearOffer() { offerSig = ''; offerMiss = 0; userHid = false; lastHits = null; hideBadges(); send('offer', { status: 'idle', list: [] }); }
+function clearOffer() { offerSig = ''; offerMiss = 0; userHid = false; lastHits = null; hoverId = null; hideBadges(); send('offer', { status: 'idle', list: [] }); }
 
 async function scanOnce(manual) {
   if (scanning || !settings.readCards) return;
@@ -205,7 +221,8 @@ async function scanOnce(manual) {
     if (hits.length) {
       // Known combos for this champion move a card up; known traps can never be the best pick.
       const BONUS = { god: -0.4, strong: -0.2, blackTech: -0.05, entertainment: 0, bug: 0.2, trap: 1 };
-      const score = h => h.rank / h.total + (h.combo ? BONUS[h.combo.type] || 0 : 0);
+      hits.forEach(describe);
+      const score = h => h.rank / h.total + (h.combo ? BONUS[h.combo.type] || 0 : 0) + (h.completes ? -0.3 : 0);
       const best = [...hits].sort((a, b) => score(a) - score(b))[0];
       hits.forEach(h => { h.best = h.id === best.id; h.screen = res.toDip(h.box); });
       offerMiss = 0;
@@ -213,12 +230,69 @@ async function scanOnce(manual) {
       if (sig !== offerSig) {
         offerSig = sig;
         showBadges(hits, res.display);
-        send('offer', { status: 'found', list: hits.map(({ id, name, rarity, rank, total, grade, best, combo }) => ({ id, name, rarity, rank, total, grade, best, combo })) });
+        send('offer', { status: 'found', list: hits.map(({ id, name, rarity, rank, total, grade, best, combo, label, kind }) => ({ id, name, rarity, rank, total, grade, best, combo, label, kind })) });
       }
     } else if (offerSig) {
-      if (++offerMiss >= 2) { resolved++; clearOffer(); }       // cards gone: the pick is done
+      if (++offerMiss >= 2) {                                    // cards gone: the pick is done
+        resolved++;
+        if (hoverId && Date.now() - hoverAt < 8000) addTaken(hoverId);   // the card the mouse was on when they closed
+        clearOffer();
+      }
     } else if (manual) send('offer', { status: res ? 'none' : (/^error/.test(ocr.status()) ? 'error' : 'none'), list: [] });
   } catch { /* try again next tick */ } finally { scanning = false; }
+}
+
+// ---------- what I have taken, and what that means for each card ----------
+function findAug(id) { const r = currentData && currentData.rarities; if (!r) return null; for (const l of Object.values(r)) { const a = l.find(x => x.id === id); if (a) return a; } return null; }
+function findAugByName(name) { const r = currentData && currentData.rarities; if (!r) return null; const k = data.norm(name); for (const l of Object.values(r)) { const a = l.find(x => data.norm(x.name) === k); if (a) return a; } return null; }
+const pushTaken = () => { send('taken', taken.map(a => ({ id: a.id, name: a.name, img: a.img, grade: a.grade }))); situSig = ''; };
+function addTaken(id) { const a = findAug(id); if (a && !taken.some(t => t.id === id)) { taken.push(a); pushTaken(); } }
+function toggleTaken(id) { if (taken.some(t => t.id === id)) { taken = taken.filter(t => t.id !== id); pushTaken(); } else addTaken(id); }
+
+const COMBO = { god: 'God combo', strong: 'Strong combo', blackTech: 'Niche tech', entertainment: 'Fun build', bug: 'Bugged', trap: 'Trap', combo: 'Combo' };
+// One specific line per card: which combo, what it still needs, which item, and whether you have it.
+function describe(h) {
+  h.label = null; h.kind = null; h.completes = false;
+  const have = new Set(taken.map(t => data.norm(t.name)));
+  if (h.combo) {
+    const T = COMBO[h.combo.type] || 'Combo';
+    const got = h.combo.with.filter(n => have.has(data.norm(n))), need = h.combo.with.filter(n => !have.has(data.norm(n)));
+    h.kind = h.combo.type;
+    if (!h.combo.with.length) h.label = `${T} on ${current ? current.name : 'this champion'}`;
+    else if (!need.length) { h.label = `Completes ${T}: you have ${got.join(' + ')}`; h.completes = h.combo.type !== 'trap' && h.combo.type !== 'bug'; }
+    else if (got.length) h.label = `${T}: have ${got.join(' + ')}, still needs ${need.join(' + ')}`;
+    else h.label = `${T}: also needs ${need.join(' + ')}`;
+  } else if (h.items && h.items.length) {
+    const it = h.items[0];
+    const owned = live && live.items.some(i => String(i.itemID) === String(it.id));
+    const b = currentData && currentData.build;
+    const planned = b && [...((b.core && b.core.items) || []), ...(b.options || []).flat()].some(i => String(i.id) === String(it.id));
+    h.kind = 'item';
+    h.label = `Needs ${it.name}` + (owned ? ': you have it' : planned ? ': in your build' : ': not in your usual build');
+  }
+}
+function trackCursor() {
+  if (!offerSig || !lastHits || !lastDisplay) return;
+  const pt = screen.getCursorScreenPoint();
+  const x = pt.x - lastDisplay.bounds.x, y = pt.y - lastDisplay.bounds.y;
+  const centers = lastHits.map(h => h.screen.x + h.screen.w / 2);
+  const gaps = centers.slice(1).map((c, i) => c - centers[i]);
+  const half = (gaps.length ? Math.min(...gaps) : 320) / 2;
+  const top = Math.min(...lastHits.map(h => h.screen.y)) - 80;
+  const i = centers.findIndex(c => Math.abs(x - c) < half);
+  if (i >= 0 && y > top) { hoverId = lastHits[i].id; hoverAt = Date.now(); }
+}
+
+// ---------- build advice for this game (enemy team, my team, my augments) ----------
+function updateSituation() {
+  if (!live || !currentData || !currentData.build) return;
+  const sig = live.players.map(p => (p.champ ? p.champ.id : '?') + ':' + p.items.map(i => i.itemID).join('.') + ':' + p.spellAugments.join('.')).join('|') + '#' + taken.map(t => t.id).join(',');
+  if (sig === situSig) return;                 // nothing changed: do nothing
+  situSig = sig;
+  for (const p of live.players) if (p.me) for (const n of p.spellAugments) { const a = findAugByName(n); if (a && !taken.some(t => t.id === a.id)) { taken.push(a); send('taken', taken.map(t => ({ id: t.id, name: t.name, img: t.img, grade: t.grade }))); } }
+  try {
+    send('situation', situation.analyze(data.global(), { champ: live.champ, players: live.players, myTeam: live.team, myItems: live.items, build: currentData.build, taken, itemInfo: id => data.itemInfo(data.global(), id) }));
+  } catch { /* advice is optional */ }
 }
 
 // Picks can only be made while dead (or at the very start), so that is the only time we look.
@@ -230,6 +304,7 @@ function wantScan() {
   return dead || (resolved === 0 && Date.now() - gameStart < 150000);
 }
 function scanLoop() {
+  trackCursor();
   if (wantScan() && Date.now() - lastScan >= 1100) scanOnce(false);
   setTimeout(scanLoop, 400);
 }
@@ -244,7 +319,8 @@ function setPhase(next) {
     gameStart = Date.now(); resolved = 0;
     if (settings.readCards) ocr.start();
   }
-  if (prev === 'game') { gameChamp = null; myName = null; level = 0; dead = false; clearOffer(); ocr.stop(); }
+  if (prev === 'game') { gameChamp = null; myName = null; level = 0; dead = false; live = null; situSig = ''; clearOffer(); ocr.stop(); send('situation', null); }
+  if (next === 'game') { taken = []; pushTaken(); }
   pushState();
 }
 
@@ -257,7 +333,7 @@ async function poll() {
         gameChamp = me.champ;
         try { const gs = await getLocal(`${LIVE}/gamestats`); if (gs && gs.gameTime > 150) { gameStart = Date.now() - gs.gameTime * 1000; } } catch { /* ignore */ }
       }
-      level = me.level; dead = me.dead;
+      level = me.level; dead = me.dead; live = me;
       next = 'game'; delay = 1500;
     }
   } catch { gameChamp = null; myName = null; }
@@ -272,6 +348,7 @@ async function poll() {
   }
   setPhase(next);
   if (next === 'game' && gameChamp && (!current || current.id !== gameChamp.id)) show(gameChamp);
+  if (next === 'game') updateSituation();
   setTimeout(poll, delay);
 }
 
@@ -295,6 +372,7 @@ ipcMain.on('set-key', (_e, which, accel) => {
   registerKeys(); saveSettings(); pushState();
 });
 ipcMain.on('read-cards-toggle', () => { settings.readCards = !settings.readCards; saveSettings(); if (!settings.readCards) { clearOffer(); ocr.stop(); } pushState(); });
+ipcMain.on('taken-toggle', (_e, id) => toggleTaken(id));
 ipcMain.on('read-cards', () => { offerSig = ''; scanOnce(true); });
 ipcMain.on('hide', () => win.hide());
 ipcMain.on('quit', () => { if (badgeWin && !badgeWin.isDestroyed()) badgeWin.destroy(); app.quit(); });
