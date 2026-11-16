@@ -1,5 +1,5 @@
 {
-  "version": "4.2.0",
+  "version": "4.2.1",
   "files": {
     "badges.html": "3aa81679b0deade7d67bf789055e1d207c7023c180f491c40c544ed73135f222",
     "data.js": "bcbe6e41eff607f43d62016fad9046091d34d081207a980c1ba3ce8a9ce78dbe",
@@ -7,7 +7,7 @@
     "match.js": "f954f7b550bc7e755f825743be597a67618598b234ec947de0fe89ff637dbd69",
     "ocr.js": "f00b0bddb7fb248ade0d9741da6c8baf58668668dbf74070c0fee2ca8a6db839",
     "ocr.ps1": "db88420116ed0d4daafec2eb42dc1ab41b18f80026de2ac4426bc47f64fa43e2",
-    "overlay.html": "59a84ef26a792ef3219b0560310868a2082c8c16bdc58040d5d7d924e05d96b5",
+    "overlay.html": "64ac6eba1a3a13735f2b0dc8253447c6f6c46679e93dd18713ae4b914afbc3ad",
     "preload.js": "6ce193561e8086c0f9ba802bf06136a428ce3b35025cb0f18e95e641a7491444",
     "situation.js": "13c5d7303694e69c09c8b6697bb94306e211da258f8b270477c480a6e6585655"
   }

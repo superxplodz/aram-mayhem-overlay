@@ -85,7 +85,7 @@
   footer.keys { border-top: 0; padding-top: 0; } #keymsg { color: var(--bad); margin-left: auto; }
   .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; white-space: nowrap; }
   .tag.god { background: #ffb347; color: #0b0f14; } .tag.strong { background: #42d98a; color: #062014; } .tag.fun { background: #c895ff; color: #1a0b2a; } .tag.trap, .tag.bug { background: #ff7070; color: #2a0808; }
-  .extra { grid-column: 3 / 5; font-size: 12px; color: var(--pris); padding-top: 2px; } .extra.item { color: var(--gold); }
+  .extra { grid-column: 3 / 5; font-size: 12px; color: var(--pris); padding-top: 2px; } .extra.need { color: var(--gold); }
   .combo { padding: 6px 2px; border-top: 1px solid var(--line); } .combo:first-of-type { border-top: 0; } .combo .sub { color: var(--dim); font-size: 12px; margin-top: 2px; }
   #credit { padding: 0 10px 6px; font-size: 10px; color: #5f6878; } #credit a { color: inherit; }
 </style>
@@ -133,10 +133,10 @@
     if (opts.best) row.append(el('span', 'pill', 'PICK'));
     else row.append(el('span', 'side', opts.side || (a.pickRate != null ? a.pickRate.toFixed(0) + '%' : '')));
     if (a.combo) { const nm = row.querySelector('.name'); nm.append(tag(a.combo.type)); }
-    if (a.label) row.append(el('div', 'extra' + (a.combo ? '' : ' item'), a.label));
+    if (a.label) row.append(el('div', 'extra' + (a.combo ? '' : ' need'), a.label));
     else {
       if (a.combo && a.combo.with && a.combo.with.length) row.append(el('div', 'extra', 'Combo with ' + a.combo.with.join(' + ')));
-      if (a.items && a.items.length) row.append(el('div', 'extra item', 'Needs ' + a.items.map(i => i.name).join(' or ')));
+      if (a.items && a.items.length) row.append(el('div', 'extra need', 'Needs ' + a.items.map(i => i.name).join(' or ')));
     }
     if (TAKEN.some(t => t.id === a.id)) row.classList.add('took');
     if (!opts.fixed) { const d = el('div', 'desc acts'); const b = el('button', 'link', TAKEN.some(t => t.id === a.id) ? 'Remove from my augments' : 'I took this'); b.onclick = e => { e.stopPropagation(); o.toggleTaken(a.id); }; d.append(b); row.append(d); }
